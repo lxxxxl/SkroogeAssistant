@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">Skrooge Assistant</string>
+    <string name="action_settings">Settings</string>
+    <string name="sum">Сумма</string>
+    <string name="check">Счет</string>
+    <string name="date">Дата</string>
+    <string name="category">Категория</string>
+    <string name="comment">Комментарий</string>
+    <string name="add_cat">Категория</string>
+    <string name="add_sum_txt">Сумма</string>
+    <string name="add_check_txt">Счет</string>
+</resources>
