@@ -320,55 +320,45 @@ public class MainActivity extends AppCompatActivity {
         EditText add_sum = (EditText)  addLayout.findViewById(R.id.add_sum);
         EditText add_comment = (EditText)  addLayout.findViewById(R.id.add_comment);
 
+        data = data.replace("минус", "-");
+        data = data.replace("плюс", "+");
+        data = data.replace("- ", "-");
+        data = data.replace("+ ", "+");
+
 
         String[] data_split = data.split(":| ");
         int data_split_length = data_split.length;
 
-        if (data_split_length<=1)
+        if (data_split_length<1)
             return;
 
         // parse sum
-
-        // sign
-        if (data_split[counter].equals("минус") || data_split[counter].equals("плюс")) {
-            if (data_split[counter].equals("минус"))
-                sum = "-";
-            else
-                sum = "+";
-
-            counter++;
-
-
             // number
-            if (Pattern.matches("[0-9]+", data_split[counter]) == true)
-                sum += data_split[counter];
-            counter++;
-        }
-        else if (data_split[counter].startsWith("-") || data_split[counter].startsWith("+")){
+        if (Pattern.matches("[\\+\\-0-9]+", data_split[counter]) == true){
             sum = data_split[counter];
             counter++;
         }
 
-
-
-        if ((data_split_length>=counter) && Pattern.matches("[0-9]+", data_split[counter])) {
+        if ((data_split_length>counter) && Pattern.matches("[0-9]+", data_split[counter])) {
             sum += "." + data_split[counter];
             counter++;
         }
 
         //parse category
-        category = data_split[counter];
-        int last_found_index = -1;
         int good_index = -1;
-        while (((last_found_index = getIndex(spinner_cats, category)) != -1) && counter<data_split_length){
-            category += " " + data_split[counter];
-            counter++;
-            good_index = last_found_index;
+        if (data_split_length > counter) {
+            category = data_split[counter];
+            int last_found_index = -1;
+            while (data_split_length > counter && ((last_found_index = getIndex(spinner_cats, category)) != -1)) {
+                category += " " + data_split[counter];
+                counter++;
+                good_index = last_found_index;
+            }
         }
 
 
         // parse comment
-        while (counter < data_split_length){
+        while (data_split_length > counter){
             comment += data_split[counter] + " ";
             counter++;
         }
