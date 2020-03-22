@@ -2,9 +2,13 @@ package ru.lxx.skroogeassistant;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Environment;
+import android.speech.RecognizerIntent;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
@@ -38,16 +42,21 @@ import java.io.FileReader;
 import java.io.InputStreamReader;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.Vector;
+import java.util.regex.Pattern;
 
 
 public class MainActivity extends AppCompatActivity {
 
-    private int requestCode=1;
-    private FloatingActionButton fab;
+    private static final int REQ_CODE_SPEECH_INPUT = 10;
+    private FloatingActionButton fabAdd;
+    private Activity mActivity;
+    private LinearLayout addLayout;
 
     @SuppressLint("RestrictedApi")
     @Override
@@ -58,53 +67,23 @@ public class MainActivity extends AppCompatActivity {
         setSupportActionBar(toolbar);
 
 
-        fab = findViewById(R.id.fab);
-        fab.setOnClickListener(new View.OnClickListener() {
+        fabAdd = findViewById(R.id.fabAdd);
+        addLayout = findViewById(R.id.addLayout);
+        mActivity = this;
+        fabAdd.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
 
 
-                LinearLayout addLayout = findViewById(R.id.addLayout);
+
                 if (addLayout.getVisibility()==View.VISIBLE) {
 
                     addLayout.setVisibility(View.INVISIBLE);
 
                     try {
-                        CSVWriter writer = new CSVWriter(new FileWriter(Environment.getExternalStorageDirectory().toString() + "/SkroogeAssistant/data.csv", true), '\t');
-                        String[] entries = new String[5];
-
-                        DateFormat df = new SimpleDateFormat("dd-MM-yyy");
-                        String date = df.format(Calendar.getInstance().getTime());
-
-                        Spinner spinner_checks = (Spinner) addLayout.findViewById(R.id.add_check);
-                        Spinner spinner_cats = (Spinner) addLayout.findViewById(R.id.add_cat);
-                        EditText add_sum = (EditText)  addLayout.findViewById(R.id.add_sum);
-                        EditText add_comment = (EditText)  addLayout.findViewById(R.id.add_comment);
-
-                        String check = spinner_checks.getSelectedItem().toString();
-                        String sum = add_sum.getText().toString();
-                        String category = spinner_cats.getSelectedItem().toString();
-                        String comment = add_comment.getText().toString();
-
-                        if (check.isEmpty() | sum.isEmpty() | category.isEmpty()){
-                            Snackbar.make(view, "Check, sum, category are mandatory", Snackbar.LENGTH_LONG)
-                                    .setAction("Action", null).show();
-                            return;
-                        }
-
-                        entries[0] = check;
-                        entries[1] = date;
-                        entries[2] = sum;
-                        entries[3] = category;
-                        entries[4] = comment;
-
-                        writer.writeNext(entries);
-                        writer.close();
-
-                        readCsvFile();
-
+			            saveExpence(view);
                     }
-                    catch (IOException e) {
+                    catch (Exception e) {
                         Snackbar.make(view, "Some error occured with CSV file", Snackbar.LENGTH_LONG)
                                 .setAction("Action", null).show();
                         e.printStackTrace();
@@ -117,6 +96,22 @@ public class MainActivity extends AppCompatActivity {
                 else
                     addLayout.setVisibility(View.VISIBLE);
 
+            }
+        });
+
+        fabAdd.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View view) {
+		    String[] permissions = {Manifest.permission.RECORD_AUDIO};
+			ActivityCompat.requestPermissions(mActivity, permissions, 2);
+		    if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)
+            {
+                Snackbar.make(findViewById(R.id.table), "Grant MIC access to app", Snackbar.LENGTH_LONG)
+                    .setAction("Action", null).show();
+            }
+	
+                //promptSpeechInput();
+		        return false;
             }
         });
 
@@ -148,7 +143,7 @@ public class MainActivity extends AppCompatActivity {
 
 
         String[] permissions = {Manifest.permission.WRITE_EXTERNAL_STORAGE};
-        ActivityCompat.requestPermissions(this, permissions, requestCode);
+        ActivityCompat.requestPermissions(mActivity, permissions, 1);
 
         if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)!=PackageManager.PERMISSION_GRANTED)
         {
@@ -225,11 +220,11 @@ public class MainActivity extends AppCompatActivity {
         catch (Exception ex){
             Snackbar.make(findViewById(R.id.table), "Cannot find checks.txt or categories.txt. Please create them in SkroogeAssistant dir at SD card", Snackbar.LENGTH_LONG)
                     .setAction("Action", null).show();
-            fab.setVisibility(View.INVISIBLE);
+            fabAdd.setVisibility(View.INVISIBLE);
             ex.printStackTrace();
         }
 
-        readCsvFile();
+        readExpencesFile();
 
     }
 
@@ -247,7 +242,7 @@ public class MainActivity extends AppCompatActivity {
                 } else {
 
                     // permission denied, boo! Disable the
-                    // functionality that depends on this permission.uujm
+                    // functionality that depends on this permission.
                     Toast.makeText(MainActivity.this, "Permission denied to read your External storage", Toast.LENGTH_SHORT).show();
 
                     //app cannot function without this permission for now so close it...
@@ -255,10 +250,188 @@ public class MainActivity extends AppCompatActivity {
                 }
                 return;
             }
+	    case 2: {
+		 // If request is cancelled, the result arrays are empty.
+                if (grantResults.length > 0
+                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    promptSpeechInput();
+                } else {
+
+                    // permission denied, boo! Disable the
+                    // functionality that depends on this permission.
+                    Toast.makeText(MainActivity.this, "Permission denied to access MIC", Toast.LENGTH_SHORT).show();
+                }
+                return;
+	    }
+        }
+    }
+    
+    
+        /**
+     * Showing google speech input dialog
+     * */
+    private void promptSpeechInput() {
+        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
+        intent.putExtra(RecognizerIntent.EXTRA_PROMPT,
+                getString(R.string.speech_prompt));
+        try {
+            startActivityForResult(intent, REQ_CODE_SPEECH_INPUT);
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(getApplicationContext(),
+                    getString(R.string.speech_not_supported),
+                    Toast.LENGTH_SHORT).show();
+        }
+    }
+ 
+    /**
+     * Receiving speech input
+     * */
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+ 
+        switch (requestCode) {
+        case REQ_CODE_SPEECH_INPUT: {
+            if (resultCode == RESULT_OK && null != data) {
+                ArrayList<String> result = data
+                        .getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
+                //Snackbar.make(findViewById(R.id.table), result.get(0), Snackbar.LENGTH_LONG).setAction("Action", null).show();
+
+                processVoiceInput(result.get(0));
+                addLayout.setVisibility(View.VISIBLE);
+            }
+            break;
+        }
+ 
         }
     }
 
-    void readCsvFile(){
+
+    void processVoiceInput(String data){
+        String sum = "";
+        String category = "";
+        String comment = "";
+        int counter = 0;
+
+        Spinner spinner_cats = (Spinner) addLayout.findViewById(R.id.add_cat);
+        EditText add_sum = (EditText)  addLayout.findViewById(R.id.add_sum);
+        EditText add_comment = (EditText)  addLayout.findViewById(R.id.add_comment);
+
+
+        String[] data_split = data.split(":| ");
+        int data_split_length = data_split.length;
+
+        if (data_split_length<=1)
+            return;
+
+        // parse sum
+
+        // sign
+        if (data_split[counter].equals("минус") || data_split[counter].equals("плюс")) {
+            if (data_split[counter].equals("минус"))
+                sum = "-";
+            else
+                sum = "+";
+
+            counter++;
+
+
+            // number
+            if (Pattern.matches("[0-9]+", data_split[counter]) == true)
+                sum += data_split[counter];
+            counter++;
+        }
+        else if (data_split[counter].startsWith("-") || data_split[counter].startsWith("+")){
+            sum = data_split[counter];
+            counter++;
+        }
+
+
+
+        if ((data_split_length>=counter) && Pattern.matches("[0-9]+", data_split[counter])) {
+            sum += "." + data_split[counter];
+            counter++;
+        }
+
+        //parse category
+        category = data_split[counter];
+        int last_found_index = -1;
+        int good_index = -1;
+        while (((last_found_index = getIndex(spinner_cats, category)) != -1) && counter<data_split_length){
+            category += " " + data_split[counter];
+            counter++;
+            good_index = last_found_index;
+        }
+
+
+        // parse comment
+        while (counter < data_split_length){
+            comment += data_split[counter] + " ";
+            counter++;
+        }
+
+
+
+
+        add_sum.setText(sum);
+        add_comment.setText(comment.trim());
+        if (good_index != -1)
+            spinner_cats.setSelection(good_index);
+
+
+    }
+
+    private int getIndex(Spinner spinner, String str) {
+
+        int index = -1;
+
+        for (int i = 0; i < spinner.getCount(); i++) {
+            String item = spinner.getItemAtPosition(i).toString().toLowerCase();
+            if (item.contains(str)) {
+                index = i;
+            }
+        }
+        return index;
+    }
+    void saveExpence(View view) throws IOException {
+	                CSVWriter writer = new CSVWriter(new FileWriter(Environment.getExternalStorageDirectory().toString() + "/SkroogeAssistant/data.csv", true), '\t');
+                        String[] entries = new String[5];
+
+                        DateFormat df = new SimpleDateFormat("dd-MM-yyy");
+                        String date = df.format(Calendar.getInstance().getTime());
+
+                        Spinner spinner_checks = (Spinner) addLayout.findViewById(R.id.add_check);
+                        Spinner spinner_cats = (Spinner) addLayout.findViewById(R.id.add_cat);
+                        EditText add_sum = (EditText)  addLayout.findViewById(R.id.add_sum);
+                        EditText add_comment = (EditText)  addLayout.findViewById(R.id.add_comment);
+
+                        String check = spinner_checks.getSelectedItem().toString();
+                        String sum = add_sum.getText().toString();
+                        String category = spinner_cats.getSelectedItem().toString();
+                        String comment = add_comment.getText().toString().trim();
+
+                        if (check.isEmpty() | sum.isEmpty() | category.isEmpty()){
+                            Snackbar.make(view, "Check, sum, category are mandatory", Snackbar.LENGTH_LONG)
+                                    .setAction("Action", null).show();
+                            return;
+                        }
+
+                        entries[0] = check;
+                        entries[1] = date;
+                        entries[2] = sum;
+                        entries[3] = category;
+                        entries[4] = comment;
+
+                        writer.writeNext(entries);
+                        writer.close();
+
+                        readExpencesFile();
+    }
+
+    void readExpencesFile(){
         TableLayout tableLayout = (TableLayout) findViewById(R.id.table);
 
         tableLayout.removeAllViews();

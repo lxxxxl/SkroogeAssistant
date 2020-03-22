@@ -9,4 +9,6 @@
     <string name="add_cat">Категория</string>
     <string name="add_sum_txt">Сумма</string>
     <string name="add_check_txt">Счет</string>
+    <string name="speech_prompt">Произнесите сумму, категорию, комментарий. Пример: минус десять семдесят расходы какие то расходы</string>
+    <string name="speech_not_supported">Голосовой ввод не поддерживается</string>
 </resources>
